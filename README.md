@@ -4,8 +4,11 @@ An eighteen-face display toy for the **Waveshare 1.51" transparent OLED** and an
 **ESP32-S3 SuperMini**. Clocks, weather, and a few things that are just nice to
 look at through a see-through panel.
 
-No credentials in the source. On first boot the clock opens its own Wi-Fi
-network and walks you through setup from your phone.
+The ESPHome firmware integrates with Home Assistant. The original standalone
+Arduino sketch is also available; its setup instructions appear below. The
+conversion to ESPHome was performed with GitHub Copilot.
+
+This project is forked from [deepbluesea15/orbital-clock](https://github.com/deepbluesea15/orbital-clock).
 
 ## Faces
 
@@ -31,7 +34,7 @@ power cycles.
 | 15 | FLYOVER | Wireframe terrain scrolling toward you under a crescent moon |
 | 16 | TESSERACT | A rotating 4D hypercube, projected 4D→3D→2D |
 | 17 | JELLYFISH | Drifting jellies with pulsing bells and rising bubbles |
-| 18 | BOUNCE | The screensaver, carrying the time. Counts bounces, and separately corner hits |
+| 18 | BOUNCE | A time-carrying screensaver with varied rebounds; each non-corner hit has a 1-in-25 chance to aim for a corner |
 
 ## Hardware
 
@@ -60,12 +63,84 @@ These pins are the S3's default FSPI group, they sit together on the header, and
 none is a strapping pin. If you change them, edit the `PIN_*` defines at the top
 of the sketch. Avoid GPIO19/20 (USB), GPIO43/44 (UART0) and GPIO46.
 
-## Flashing
+## ESPHome and Home Assistant
+
+The ESPHome configuration and custom components are on the `main` branch.
+For more details, see the [ESPHome guide](esphome/README.md).
+
+### ESPHome Dashboard
+
+Create a device in the ESPHome Dashboard and use this YAML:
+
+```yaml
+packages:
+  orbital_clock:
+    url: https://github.com/arikalish/orbital-clock-esphome.git
+    ref: main
+    files: [esphome/orbital-clock.yaml]
+    refresh: always
+
+esphome:
+  name: orbital-clock
+  friendly_name: Orbital Clock
+```
+
+In the Dashboard's `secrets.yaml`, define `wifi_ssid`, `wifi_password`,
+`fallback_ap_password` (at least eight characters), and `api_encryption_key`
+(a base64-encoded 32-byte key). Never commit or share the secrets file. ESPHome
+downloads the package and external components from GitHub; no source files need
+to be copied to Home Assistant. Both the package and the external components
+are refreshed on each build. Choose a unique `name` for each device.
+
+Install the firmware via USB initially, then add the device using Home
+Assistant's ESPHome integration. The Dashboard can build and install later
+updates over Wi-Fi. When changing a hostname, use the device's old address for
+the first OTA upload.
+
+### Build locally
+
+Install ESPHome, clone the repository, and create the ignored secrets
+file from the example:
+
+```powershell
+git clone https://github.com/arikalish/orbital-clock-esphome.git
+Set-Location orbital-clock-esphome
+Copy-Item esphome\secrets.yaml.example esphome\secrets.yaml
+```
+
+Fill in the four secrets described above. To generate an API encryption key:
+
+```powershell
+python -c "import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+```
+
+Validate, build, and install:
+
+```powershell
+esphome config esphome\orbital-clock.yaml
+esphome compile esphome\orbital-clock.yaml
+esphome run esphome\orbital-clock.yaml
+```
+
+The configuration fetches its external components from the published
+`main` branch, so merge and push component changes before testing them with it.
+Build outputs, including `firmware.factory.bin` and `firmware.ota.bin`, are
+under `esphome\.esphome\build\orbital-clock\build`. Serial logs use USB
+Serial/JTAG at 115200 baud. If USB flashing does not restart the board,
+power-cycle it.
+
+In Home Assistant, choose the clock face, time format, weather location and
+units, time zone, day/night brightness and schedule, and face rotation interval.
+The default night schedule is 22:00–07:00 local time; rotation is off by
+default. BOOT taps cycle faces, a short hold toggles the time format, and an
+eight-second hold resets clock settings.
+
+## Flashing (original Arduino)
 
 ### Option A — prebuilt binary, nothing to install
 
 1. Grab `OrbitalClockv1.0.bin` from the
-   [Releases](../../releases) page.
+   [original project's Releases](https://github.com/deepbluesea15/orbital-clock/releases) page.
 2. Open [web.esphome.io](https://web.esphome.io/) or
    [esptool-js](https://espressif.github.io/esptool-js/) in Chrome or Edge.
 3. Connect, pick the board's serial port, choose **Install from file**, select
@@ -102,7 +177,7 @@ arduino-cli upload -p /dev/ttyACM0 \
 
 `build/OrbitalClock.ino.merged.bin` is the single flash-at-zero image.
 
-## First-time setup
+## First-time setup (original Arduino)
 
 On first boot the screen shows:
 
@@ -128,7 +203,7 @@ to your device.
 nothing sensitive is exposed, but anyone in range can reach that page while it
 is running.
 
-## Buttons
+## Buttons (original Arduino)
 
 | Action | Effect |
 |---|---|
@@ -140,7 +215,7 @@ is running.
 The 8-second hold shows a progress bar and countdown from 1.8 seconds onward.
 Let go before it reaches zero and nothing changes.
 
-## Time and location
+## Time and location (original Arduino)
 
 - **Time** comes from NTP (`pool.ntp.org`).
 - **Weather** comes from [Open-Meteo](https://open-meteo.com/), which needs no
@@ -163,7 +238,7 @@ Let go before it reaches zero and nothing changes.
 
 Settings live in NVS on the device, never in source.
 
-## Notes on the panel
+## Notes on the panel (original Arduino)
 
 Waveshare warns that a static image on this display causes afterimages. The
 sketch shifts the whole layout by a pixel or two every minute and drops contrast
@@ -173,7 +248,7 @@ overnight between 22:00 and 07:00. Both are on by default — `ANTI_BURNIN` and
 Transparent OLEDs look best with sparse bright pixels on black, which is why
 most faces are line art rather than filled shapes.
 
-## Implementation notes
+## Implementation notes (original Arduino)
 
 A few things that were less obvious than they look:
 
@@ -210,7 +285,7 @@ A few things that were less obvious than they look:
   within a tile row. It's gated to the cyberpunk faces — a corrupted jellyfish
   just looks like a bug.
 
-## Troubleshooting
+## Troubleshooting (original Arduino)
 
 | Symptom | Try |
 |---|---|
